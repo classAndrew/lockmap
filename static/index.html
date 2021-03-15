@@ -1,0 +1,48 @@
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+
+<body>
+    <canvas id='cv'>
+
+    </canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+    <script src="https://flyover.github.io/imgui-js/dist/imgui.umd.js"></script>
+    <script src="https://flyover.github.io/imgui-js/dist/imgui_impl.umd.js"></script>
+    <script>
+        function Unproject(vec, view, projection, x, y, width, height) {
+
+            var dest = vec3.create(); // The result.
+            var m = mat4.create(); // The view * projection matrix.
+            var im = mat4.create(); // The inverted view * projection matrix.
+            var v = vec4.create(); // The vector.
+            var tv = vec4.create(); // The transformed vector.
+
+            // Apply viewport transform.
+            v[0] = (vec[0] - x) * 2.0 / width - 1.0;
+            v[1] = (vec[1] - y) * 2.0 / height - 1.0;
+            v[2] = vec[2];
+            v[3] = 1.0;
+
+            // Build inverted view * projection matrix.
+            mat4.multiply(m, projection, view);
+            if (!mat4.invert(im, m)) {
+                return null;
+            }
+
+            vec4.transformMat4(tv, v, im);
+            if (v[3] === 0.0) {
+                return null;
+            }
+
+            dest[0] = tv[0] / tv[3];
+            dest[1] = tv[1] / tv[3];
+            dest[2] = tv[2] / tv[3];
+
+            return dest;
+
+        }
+    </script>
+    <script src="main.js"></script>
+</body>
+
+<!-- Favicon is the map icon found in the bloom pack https://www.curseforge.com/minecraft/texture-packs/bloom-->
