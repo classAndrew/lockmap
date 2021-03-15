@@ -20,6 +20,7 @@ func main() {
 	r.StaticFile("/line_vertex.vs", "./static/line_vertex.vs")
 	r.StaticFile("/line_fragment.fs", "./static/line_fragment.fs")
 	r.StaticFile("/", "./static/index.html")
+
 	// enable cors middleware
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
