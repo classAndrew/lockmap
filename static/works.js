@@ -8,11 +8,14 @@ var camy = 0;
 var zoom = 0;
 var lastX = 0;
 var lastY = 0;
+var mapRatio;
+var mapHeight;
+var mapWidth;
 
 ! function main() {
 
     if (!gl) {
-        alert("Get your browser to support webgl2 :)");
+        alert("Get your browser to support webgl2 smile");
     }
 
     function canvasResize() {
@@ -57,9 +60,9 @@ async function setup() {
     ImGui.StyleColorsDark();
     const clear_color = new ImGui.ImVec4(0.05, 0.05, 0.0, 1.00);
 
-    async function setupShaders() {
-        const fragmentSrc = await (await fetch("/fragment.fs")).text()
-        const vertexSrc = await (await fetch("/vertex.vs")).text()
+    async function setupShaders(vertexResource, fragmentResource) {
+        const fragmentSrc = await (await fetch(fragmentResource)).text()
+        const vertexSrc = await (await fetch(vertexResource)).text()
 
         const vs = gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vs, vertexSrc);
@@ -67,7 +70,7 @@ async function setup() {
 
         if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
             console.log(gl.getShaderInfoLog(vs));
-            console.log("Shader compile error (Vertex)");
+            console.log(`Shader compile error ${vertexResource}`);
             gl.deleteShader(vs);
             return;
         }
@@ -78,7 +81,7 @@ async function setup() {
 
         if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
             console.log(gl.getShaderInfoLog(fs));
-            console.log("Shader compile error (Fragment)");
+            console.log(`Shader compile error ${fragmentResource}`);
             gl.deleteShader(fs);
             return;
         }
@@ -94,25 +97,13 @@ async function setup() {
         return shaderProg;
     }
 
-    const shaderProg = await setupShaders();
-    const vbuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
-    // const vertices = [-1, -1, 0, 0, 0, 1, -1, 0, 1, 0, -1, 1, 0, 0, 1, 1, 1, 0, 1, 1];
-    /*
-        [-1, -1, 0, 0, 0,
-         1, -1, 0, 1, 0,
-         -1, 1, 0, 0, 1,
-
-         1, 1, 0, 1, 1,
-         -1, 1, 0, 0, 1,
-         -1, -1, 0, 0, 1
-        ]
-    */
-    var map_ratio;
-    var map_width, map_height;
-    var image = new Image();
+    const shaderProg = await setupShaders("/vertex.vs", "/fragment.fs");
+    const terrShader = await setupShaders("/terr_vertex.vs", "/terr_fragment.fs");
+    const lineShader = await setupShaders("/line_vertex.vs", "/line_fragment.fs");
+    
     // it onload isn't asynchronous
-    async function loadTexture(image) {
+    async function loadTexture(url, meta) {
+        var image = new Image();
         let texture = gl.createTexture();
         return new Promise((resolve, reject) => {
             image.onload = () => {
@@ -121,23 +112,44 @@ async function setup() {
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                map_ratio = image.width / image.height;
-                map_width = image.width;
-                map_height = image.height;
+                meta.ratio = image.width / image.height;
+                meta.width = image.width;
+                meta.height = image.height;
                 resolve(texture);
             }
-            image.src = "/dest.png";
+            image.src = url;
         })
     }
+    var meta = {};
+    const texture = await loadTexture("/dest.png", meta);
+    mapWidth = meta.width;
+    mapRatio = meta.ratio;
+    mapHeight = meta.height;
 
-    const texture = await loadTexture(image);
+    const vertices = [-mapRatio, -1, 0, 0, 0,
+        mapRatio, -1, 0, 1, 0, -mapRatio, 1, 0, 0, 1,
 
-    const vertices = [-map_ratio, -1, 0, 0, 0,
-        map_ratio, -1, 0, 1, 0, -map_ratio, 1, 0, 0, 1,
-
-        map_ratio, 1, 0, 1, 1, -map_ratio, 1, 0, 0, 1, -map_ratio, -1, 0, 0, 1
+        mapRatio, 1, 0, 1, 1, -mapRatio, 1, 0, 0, 1, -mapRatio, -1, 0, 0, 1
     ];
-    // const vertices = [-1, -1, 0, 1, -1, 0, -1, 1, 0];
+
+    // code for generating vertices of ALL territories
+    let [offsetX, offsetY] = [2392, -6607];
+    let terdat = await (await fetch("https://api.wynncraft.com/public_api.php?action=territoryList")).json();
+    let territories = Object.values(terdat.territories);
+    let terrVertices = territories.map(t => {
+        let {startX, startY, endX, endY} = t.location;
+        return getVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY);
+    }).flat();
+
+    // generate vertices for territory box outlines
+    let lineVertices = territories.map(t => {
+        let {startX, startY, endX, endY} = t.location;
+        return getBoxVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
+    }).flat();
+
+    // gl buffer create and init code
+    const vbuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 5 * 4, 0);
     // layout = 0
@@ -146,9 +158,21 @@ async function setup() {
     // layout = 1
     gl.enableVertexAttribArray(1);
 
-    gl.useProgram(shaderProg);
+    const terrbuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrVertices), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+    gl.enableVertexAttribArray(0);
+
+    const linebuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineVertices), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+    gl.enableVertexAttribArray(0);
 
     // load and bind textures
+    // have to switch progam before sending uniform
+    gl.useProgram(shaderProg);
 
     var uSamplerLoc = gl.getUniformLocation(shaderProg, "uSampler");
     gl.activeTexture(gl.TEXTURE0);
@@ -161,6 +185,11 @@ async function setup() {
     var mProjLoc = gl.getUniformLocation(shaderProg, "proj");
     var mViewLoc = gl.getUniformLocation(shaderProg, "view");
 
+    // these are for the terr overlay. they have to get transformed in the same way
+    var terrWorldLoc = gl.getUniformLocation(terrShader, "world");
+    var terrProjLoc = gl.getUniformLocation(terrShader, "proj");
+    var terrViewLoc = gl.getUniformLocation(terrShader, "view");
+
     var mWorld = new Float32Array(16);
     var mProj = new Float32Array(16);
     var mView = new Float32Array(16);
@@ -168,21 +197,34 @@ async function setup() {
     mat4.identity(mWorld);
     // camera pos, looking at, up
     // 3.394
-    mat4.perspective(mProj, 3.1415926 / 4, canvas.width / canvas.height, 0.01, 100.0);
+    mat4.perspective(mProj, 3.1415926 / 4, canvas.width / canvas.height, 0.001, 100.0);
 
-    gl.uniformMatrix4fv(mWorldLoc, false, mWorld);
     gl.uniformMatrix4fv(mProjLoc, false, mProj);
 
+    gl.useProgram(terrShader);
+    gl.uniformMatrix4fv(terrProjLoc, false, mProj);
+    
+    // set the uniforms for the line shader
+    gl.useProgram(lineShader);
+    var lineWorldLoc = gl.getUniformLocation(lineShader, "world");
+    var lineProjLoc = gl.getUniformLocation(lineShader, "proj");
+    var lineViewLoc = gl.getUniformLocation(lineShader, "view");
+
+    gl.uniformMatrix4fv(lineProjLoc, false, mProj);
+    
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
     const res = await (await fetch(uri)).json()
     const guilds = res.data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
     var show_terr_leaderboard = true;
-    var done = false;
-
+    gl.enable(gl.GL_DEPTH_TEST);  
     function _loop(time) {
-        // change so that the camera shouldn't be moving but the world is
-        mat4.lookAt(mView, [camx, camy, 1 + zoom], [camx, camy, 0], [0, 1, 0]);
-
+        // gl.clear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);  
+        // use main program (the one for drawing the map)
+        gl.useProgram(shaderProg);
+        mat4.lookAt(mView, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
+        mat4.fromTranslation(mWorld, vec4.fromValues(-camx, -camy, -(1 + zoom), 0));
+        gl.uniformMatrix4fv(mWorldLoc, false, mWorld);
+        gl.uniformMatrix4fv(mViewLoc, false, mView);
         ImGui_Impl.NewFrame(time);
         ImGui.NewFrame();
         if (show_terr_leaderboard) {
@@ -196,28 +238,54 @@ async function setup() {
         ImGui.Begin("LockMap - The cooler map alternative");
         ImGui.Text(VERSIONSTRING);
         ImGui.Text(`Running at ${Math.round(ImGui.GetIO().Framerate)} fps`);
-        // compute the coodinates
-        // let localX = Math.floor((map_ratio + camx) * 4091 / 2 / map_ratio - 2392);
-        // let localY = Math.floor((1 - camy + (window.innerHeight / 2 - lastY) / innerHeight) * (1 + zoom) * 6485 / 2 - 6607);
+
+        // compute coordinates by reversing
         let hit = unproject(mView, mProj, lastX, lastY, window.innerWidth, window.innerHeight);
-        let localX = (map_ratio - hit[0]) * 4091 / (2 * map_ratio) - 2392;
-        let localY = (1 + hit[1]) * 6485 / 2 - 6607;
+        // local x and y is in-game coords
+        let localX = Math.round((mapRatio - hit[0] + camx) * 4091 / (2 * mapRatio) - 2392);
+        let localY = Math.round((1 + hit[1] - camy) * 6485 / 2 - 6607);
         ImGui.Text(`x: ${localX}, y: ${localY}`);
         ImGui.Checkbox("Territory Leaderboard", (value = show_terr_leaderboard) => show_terr_leaderboard = value)
         ImGui.End();
         ImGui.EndFrame();
         ImGui.Render();
 
-        gl.uniformMatrix4fv(mViewLoc, false, mView);
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+        // do I need to clear depth buffer sometimes?
         gl.clear(gl.COLOR_BUFFER_BIT);
+
         gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+        // I have to do this everytime I switch buffers
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 5 * 4, 0);
         // transparency
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.BLEND);
-        // gl.useProgram(shaderProg);
+        // I got lucky that 6 vertices and choosing 4 of them would work. I'll leave it like this for now
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // switch to drawing territory overlay
+        gl.useProgram(terrShader);
+        gl.uniformMatrix4fv(terrViewLoc, false, mView);
+        gl.uniformMatrix4fv(terrWorldLoc, false, mWorld);
+        // I have to do this everytime I switch buffers
+        gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+        // this is the 'proper' way to do it without EBO
+        for (let i = 0; i < terrVertices.length/3; i+=3) {
+            gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
+        }
+        
+        // switch to drawing the bounding boxes
+        gl.useProgram(lineShader);
+        gl.uniformMatrix4fv(lineViewLoc, false, mView);
+        gl.uniformMatrix4fv(lineWorldLoc, false, mWorld);
+        gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+        for (let i = 0; i < lineVertices.length/3; i+=3) {
+            gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
+        }
+
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
 
         window.requestAnimationFrame(_loop);
@@ -243,12 +311,12 @@ function unproject(view, proj, mx, my, screenWidth, screenHeight) {
     mat4.mul(ray_wor, viewinv, ray_eye);
     ray_wor = vec3.fromValues(ray_wor[0], ray_wor[1], ray_wor[2]);
     vec3.normalize(ray_wor, ray_wor);
+    // plane normal. it's just <0, 0, 1>
+    let n = vec3.fromValues(0, 0, 1);
     // distance from camera
     let d = -(1 + zoom);
     // origin of the ray. again, no view so it's just 0,0,0
     let O = vec3.fromValues(0, 0, 0);
-    // plane normal. it's just <0, 0, 1>
-    let n = vec3.fromValues(0, 0, 1);
     // compute t
     let t = -(dot3(O, n) + d) / dot3(ray_wor, n);
     vec3.scale(ray_wor, ray_wor, t);
@@ -258,4 +326,56 @@ function unproject(view, proj, mx, my, screenWidth, screenHeight) {
 
 function dot3(a, b) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY) {
+    let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
+         (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
+    const terrVertices = [
+        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+
+        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
+    ];
+    return terrVertices;
+}
+
+// in-game coordinates (aka annoying offset time). 
+function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thickness) {
+    [x0, y0, x1, y1] = [(x0+offsetX)/mapResX, (mapResY-y0+offsetY)/mapResY,
+        (x1+offsetX)/mapResX, (mapResY-y1+offsetY)/mapResY];
+    // compute perpendicular vectors (unit vec)
+    let u = [(y1-y0), -(x1-x0)*mapRatio];
+    vec2.normalize(u, u);
+    vec2.scale(u, u, thickness);
+
+    const lineVertices = [
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
+        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012,
+
+        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.0012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012
+    ];
+    return lineVertices;
+}
+
+// in-game coordinates to opengl [-1, 1] coordinates
+function coordConv(mapResX, mapResY, offsetX, offsetY, x, y) {
+    return [(x+offsetX)/mapResX, (mapResY-y+offsetY)/mapResY]
+}
+
+// gets the bounding box vertices from points
+function getBoxVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thickness) {
+    const vertices = [].concat(
+        getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y0, thickness),
+        getLineVertices(mapResX, mapResY, offsetX, offsetY, x1, y0, x1, y1, thickness),
+        getLineVertices(mapResX, mapResY, offsetX, offsetY, x1, y1, x0, y1, thickness),
+        getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y1, x0, y0, thickness),
+    );
+    return vertices;
 }

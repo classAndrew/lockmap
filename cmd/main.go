@@ -19,6 +19,8 @@ func main() {
 	r.StaticFile("/terr_vertex.vs", "./static/terr_vertex.vs")
 	r.StaticFile("/line_vertex.vs", "./static/line_vertex.vs")
 	r.StaticFile("/line_fragment.fs", "./static/line_fragment.fs")
+	r.StaticFile("/font_fragment.fs", "./static/font_fragment.fs")
+	r.StaticFile("/font_vertex.vs", "./static/font_vertex.vs")
 	r.StaticFile("/", "./static/index.html")
 
 	// enable cors middleware

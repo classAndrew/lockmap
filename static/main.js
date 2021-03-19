@@ -8,7 +8,9 @@ var camy = 0;
 var zoom = 0;
 var lastX = 0;
 var lastY = 0;
-var map_ratio;
+var mapRatio;
+var mapHeight;
+var mapWidth;
 
 ! function main() {
 
@@ -98,11 +100,11 @@ async function setup() {
     const shaderProg = await setupShaders("/vertex.vs", "/fragment.fs");
     const terrShader = await setupShaders("/terr_vertex.vs", "/terr_fragment.fs");
     const lineShader = await setupShaders("/line_vertex.vs", "/line_fragment.fs");
-
-    var map_width, map_height;
-    var image = new Image();
+    const fontShader = await setupShaders("/font_vertex.vs", "/font_fragment.fs");
+    
     // it onload isn't asynchronous
-    async function loadTexture(image) {
+    async function loadTexture(url, meta) {
+        var image = new Image();
         let texture = gl.createTexture();
         return new Promise((resolve, reject) => {
             image.onload = () => {
@@ -111,36 +113,43 @@ async function setup() {
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                map_ratio = image.width / image.height;
-                map_width = image.width;
-                map_height = image.height;
+                meta.ratio = image.width / image.height;
+                meta.width = image.width;
+                meta.height = image.height;
                 resolve(texture);
             }
-            image.src = "/dest.png";
+            image.src = url;
         })
     }
+    var meta = {};
+    const texture = await loadTexture("/dest.png", meta);
+    mapWidth = meta.width;
+    mapRatio = meta.ratio;
+    mapHeight = meta.height;
 
-    const texture = await loadTexture(image);
+    let [offsetX, offsetY] = [2392, -6607];
+    const bitmap = await loadTexture("charmap.png", meta);
+    new WorldFontRenderer(shaderProg, gl, map_width, map_height, offsetX, offsetY, bitmap);
 
-    const vertices = [-map_ratio, -1, 0, 0, 0,
-        map_ratio, -1, 0, 1, 0, -map_ratio, 1, 0, 0, 1,
+    const vertices = [-mapRatio, -1, 0, 0, 0,
+        mapRatio, -1, 0, 1, 0, -mapRatio, 1, 0, 0, 1,
 
-        map_ratio, 1, 0, 1, 1, -map_ratio, 1, 0, 0, 1, -map_ratio, -1, 0, 0, 1
+        mapRatio, 1, 0, 1, 1, -mapRatio, 1, 0, 0, 1, -mapRatio, -1, 0, 0, 1
     ];
 
     // code for generating vertices of ALL territories
-    let [offsetX, offsetY] = [2392, -6607];
+    
     let terdat = await (await fetch("https://api.wynncraft.com/public_api.php?action=territoryList")).json();
     let territories = Object.values(terdat.territories);
     let terrVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
-        return getVertices(map_width, map_height, offsetX, offsetY, startX, startY, endX, endY);
+        return getVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY);
     }).flat();
 
     // generate vertices for territory box outlines
     let lineVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
-        return getBoxVertices(map_width, map_height, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
+        return getBoxVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
     }).flat();
 
     // gl buffer create and init code
@@ -238,7 +247,7 @@ async function setup() {
         // compute coordinates by reversing
         let hit = unproject(mView, mProj, lastX, lastY, window.innerWidth, window.innerHeight);
         // local x and y is in-game coords
-        let localX = Math.round((map_ratio - hit[0] + camx) * 4091 / (2 * map_ratio) - 2392);
+        let localX = Math.round((mapRatio - hit[0] + camx) * 4091 / (2 * mapRatio) - 2392);
         let localY = Math.round((1 + hit[1] - camy) * 6485 / 2 - 6607);
         ImGui.Text(`x: ${localX}, y: ${localY}`);
         ImGui.Checkbox("Territory Leaderboard", (value = show_terr_leaderboard) => show_terr_leaderboard = value)
@@ -328,13 +337,13 @@ function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, e
     let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
          (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
     const terrVertices = [
-        -map_ratio+startx*map_ratio*2, -1+starty*2, 0.001, 
-        -map_ratio+endx*map_ratio*2, -1+starty*2, 0.001,
-        -map_ratio+startx*map_ratio*2, -1+endy*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
 
-        -map_ratio+endx*map_ratio*2, -1+endy*2, 0.001,
-        -map_ratio+startx*map_ratio*2, -1+endy*2, 0.001,
-        -map_ratio+endx*map_ratio*2, -1+starty*2, 0.001
+        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
     ];
     return terrVertices;
 }
@@ -344,20 +353,25 @@ function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thi
     [x0, y0, x1, y1] = [(x0+offsetX)/mapResX, (mapResY-y0+offsetY)/mapResY,
         (x1+offsetX)/mapResX, (mapResY-y1+offsetY)/mapResY];
     // compute perpendicular vectors (unit vec)
-    let u = [(y1-y0), -(x1-x0)*map_ratio];
+    let u = [(y1-y0), -(x1-x0)*mapRatio];
     vec2.normalize(u, u);
     vec2.scale(u, u, thickness);
 
     const lineVertices = [
-        -map_ratio+(x0)*map_ratio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
-        -map_ratio+(x0)*map_ratio*2+u[0], -1+(y0)*2+u[1], 0.0012,
-        -map_ratio+(x1)*map_ratio*2+u[0], -1+(y1)*2+u[1], 0.0012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
+        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012,
 
-        -map_ratio+(x1)*map_ratio*2-u[0], -1+(y1)*2-u[1], 0.0012,
-        -map_ratio+(x0)*map_ratio*2-u[0], -1+(y0)*2-u[1], 0.0012,
-        -map_ratio+(x1)*map_ratio*2+u[0], -1+(y1)*2+u[1], 0.0012
+        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.0012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012
     ];
     return lineVertices;
+}
+
+// in-game coordinates to opengl [-1, 1] coordinates
+function coordConv(mapResX, mapResY, offsetX, offsetY, x, y) {
+    return [(x+offsetX)/mapResX, (mapResY-y+offsetY)/mapResY]
 }
 
 // gets the bounding box vertices from points
