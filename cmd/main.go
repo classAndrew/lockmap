@@ -21,6 +21,8 @@ func main() {
 	r.StaticFile("/line_fragment.fs", "./static/line_fragment.fs")
 	r.StaticFile("/font_fragment.fs", "./static/font_fragment.fs")
 	r.StaticFile("/font_vertex.vs", "./static/font_vertex.vs")
+	r.StaticFile("/charmap.webp", "./static/charmap.webp")
+	r.StaticFile("/fontrenderer.js", "./static/fontrenderer.js")
 	r.StaticFile("/", "./static/index.html")
 
 	// enable cors middleware

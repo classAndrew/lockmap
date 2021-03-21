@@ -128,8 +128,7 @@ async function setup() {
     mapHeight = meta.height;
 
     let [offsetX, offsetY] = [2392, -6607];
-    const bitmap = await loadTexture("charmap.png", meta);
-    new WorldFontRenderer(shaderProg, gl, map_width, map_height, offsetX, offsetY, bitmap);
+    const bitmap = await loadTexture("/charmap.webp", meta);
 
     const vertices = [-mapRatio, -1, 0, 0, 0,
         mapRatio, -1, 0, 1, 0, -mapRatio, 1, 0, 0, 1,
@@ -216,15 +215,21 @@ async function setup() {
     var lineViewLoc = gl.getUniformLocation(lineShader, "view");
 
     gl.uniformMatrix4fv(lineProjLoc, false, mProj);
+
+
+    // world font renderer
+
+    const wFontRenderer = new WorldFontRenderer(fontShader, gl, mapWidth, mapHeight, offsetX, offsetY, bitmap, mView, mProj, mWorld);
     
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
     const res = await (await fetch(uri)).json()
     const guilds = res.data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
     var show_terr_leaderboard = true;
-    gl.enable(gl.GL_DEPTH_TEST);  
+    gl.enable(gl.DEPTH_TEST);  
     function _loop(time) {
         // gl.clear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);  
         // use main program (the one for drawing the map)
+        // switch textures have to do this every time
         gl.useProgram(shaderProg);
         mat4.lookAt(mView, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
         mat4.fromTranslation(mWorld, vec4.fromValues(-camx, -camy, -(1 + zoom), 0));
@@ -259,15 +264,18 @@ async function setup() {
         gl.clearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         // do I need to clear depth buffer sometimes?
         gl.clear(gl.COLOR_BUFFER_BIT);
-
+        // have to do this in the render loop. Font texture will be done in renderText call
         gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+        gl.activeTexture(gl.TEXTURE0);
         // I have to do this everytime I switch buffers
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 5 * 4, 0);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 5 * 4, 3*4);
         // transparency
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.BLEND);
-        // I got lucky that 6 vertices and choosing 4 of them would work. I'll leave it like this for now
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        // gl.drawArrays(gl.TRIANGLE_STRIP, 3, 3);
 
         // switch to drawing territory overlay
         gl.useProgram(terrShader);
@@ -276,6 +284,7 @@ async function setup() {
         // I have to do this everytime I switch buffers
         gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+        
         // this is the 'proper' way to do it without EBO
         for (let i = 0; i < terrVertices.length/3; i+=3) {
             gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
@@ -290,7 +299,8 @@ async function setup() {
         for (let i = 0; i < lineVertices.length/3; i+=3) {
             gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
         }
-
+        
+        wFontRenderer.renderText("ftw", 0, 0, 0.025);
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
 
         window.requestAnimationFrame(_loop);
@@ -337,13 +347,13 @@ function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, e
     let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
          (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
     const terrVertices = [
-        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.0001, 
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.0001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.0001,
 
-        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
+        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.0001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.0001,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.0001
     ];
     return terrVertices;
 }
@@ -358,13 +368,13 @@ function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thi
     vec2.scale(u, u, thickness);
 
     const lineVertices = [
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
-        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.0012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.00012, 
+        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.00012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.00012,
 
-        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.0012,
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012
+        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.00012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.00012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.00012
     ];
     return lineVertices;
 }
