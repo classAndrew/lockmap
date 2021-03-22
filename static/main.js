@@ -140,6 +140,7 @@ async function setup() {
     
     let terdat = await (await fetch("https://api.wynncraft.com/public_api.php?action=territoryList")).json();
     let territories = Object.values(terdat.territories);
+
     let terrVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
         return getVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY);
@@ -192,7 +193,7 @@ async function setup() {
     mat4.identity(mWorld);
     // camera pos, looking at, up
     // 3.394
-    mat4.perspective(mProj, 3.1415926 / 4, canvas.width / canvas.height, 0.001, 100.0);
+    mat4.perspective(mProj, 3.1415926 / 4, canvas.width / canvas.height, 0.001, 10.0);
     gl.useProgram(shaderProg);
     gl.uniformMatrix4fv(mProjLoc, false, mProj);
 
@@ -223,6 +224,16 @@ async function setup() {
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
     const res = await (await fetch(uri)).json()
     const guilds = res.data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
+    const prefMap = {};
+    for (var g of res.data) {
+        prefMap[g.name] = g.prefix;
+    }
+
+    // get territory coordinates along with the controlling guild
+    const namedTerrCoords = territories.map(t => {
+        return [prefMap[t.guild], t.location.startX+(t.location.endX-t.location.startX)/2, t.location.startY+(t.location.endY-t.location.startY)/2];
+    });
+
     var show_terr_leaderboard = true;
     gl.enable(gl.DEPTH_TEST);  
     gl.enable(gl.BLEND);
@@ -259,7 +270,7 @@ async function setup() {
         ImGui.End();
         ImGui.EndFrame();
         ImGui.Render();
-
+        
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         // do I need to clear depth buffer sometimes?
@@ -301,7 +312,12 @@ async function setup() {
         }
         
         // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
-        wFontRenderer.renderText("ANO", -857, -1577, (1+zoom)/45);
+        if (1+zoom < 0.9) {
+            for (let i = 0; i < namedTerrCoords.length; i++) {
+                wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+zoom)/45);
+            }
+        }
+        
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
 
         window.requestAnimationFrame(_loop);
