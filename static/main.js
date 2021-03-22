@@ -122,13 +122,13 @@ async function setup() {
         })
     }
     var meta = {};
+    // gl.activeTexture(gl.TEXTURE0);
     const texture = await loadTexture("/dest.png", meta);
     mapWidth = meta.width;
     mapRatio = meta.ratio;
     mapHeight = meta.height;
 
     let [offsetX, offsetY] = [2392, -6607];
-    const bitmap = await loadTexture("/charmap.webp", meta);
 
     const vertices = [-mapRatio, -1, 0, 0, 0,
         mapRatio, -1, 0, 1, 0, -mapRatio, 1, 0, 0, 1,
@@ -174,15 +174,6 @@ async function setup() {
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
     gl.enableVertexAttribArray(0);
 
-    // load and bind textures
-    // have to switch progam before sending uniform
-    gl.useProgram(shaderProg);
-
-    var uSamplerLoc = gl.getUniformLocation(shaderProg, "uSampler");
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.uniform1i(uSamplerLoc, 0);
-
     // build matrices
 
     var mWorldLoc = gl.getUniformLocation(shaderProg, "world");
@@ -202,7 +193,7 @@ async function setup() {
     // camera pos, looking at, up
     // 3.394
     mat4.perspective(mProj, 3.1415926 / 4, canvas.width / canvas.height, 0.001, 100.0);
-
+    gl.useProgram(shaderProg);
     gl.uniformMatrix4fv(mProjLoc, false, mProj);
 
     gl.useProgram(terrShader);
@@ -216,16 +207,25 @@ async function setup() {
 
     gl.uniformMatrix4fv(lineProjLoc, false, mProj);
 
-
     // world font renderer
 
-    const wFontRenderer = new WorldFontRenderer(fontShader, gl, mapWidth, mapHeight, offsetX, offsetY, bitmap, mView, mProj, mWorld);
+    const wFontRenderer = new WorldFontRenderer(fontShader, gl, mapWidth, mapHeight, offsetX, offsetY, mView, mProj, mWorld);
     
+    // load and bind textures
+    // have to switch progam before sending uniform
+    gl.useProgram(shaderProg);
+
+    var uSamplerLoc = gl.getUniformLocation(shaderProg, "uSampler");
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1i(uSamplerLoc, 0);
+
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
     const res = await (await fetch(uri)).json()
     const guilds = res.data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
     var show_terr_leaderboard = true;
     gl.enable(gl.DEPTH_TEST);  
+    gl.enable(gl.BLEND);
     function _loop(time) {
         // gl.clear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);  
         // use main program (the one for drawing the map)
@@ -266,14 +266,14 @@ async function setup() {
         gl.clear(gl.COLOR_BUFFER_BIT);
         // have to do this in the render loop. Font texture will be done in renderText call
         gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+        // textures MUST be done like this. Must be binded and activated
         gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
         // I have to do this everytime I switch buffers
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 5 * 4, 0);
         gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 5 * 4, 3*4);
         // transparency
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.enable(gl.BLEND);
-
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         // gl.drawArrays(gl.TRIANGLE_STRIP, 3, 3);
 
@@ -300,7 +300,8 @@ async function setup() {
             gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
         }
         
-        wFontRenderer.renderText("ftw", 0, 0, 0.025);
+        // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
+        wFontRenderer.renderText("ANO", -857, -1577, (1+zoom)/45);
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
 
         window.requestAnimationFrame(_loop);
@@ -347,13 +348,13 @@ function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, e
     let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
          (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
     const terrVertices = [
-        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.0001, 
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.0001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.0001,
+        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
 
-        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.0001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.0001,
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.0001
+        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
     ];
     return terrVertices;
 }
@@ -368,13 +369,13 @@ function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thi
     vec2.scale(u, u, thickness);
 
     const lineVertices = [
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.00012, 
-        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.00012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.00012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
+        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012,
 
-        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.00012,
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.00012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.00012
+        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.0012,
+        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012,
+        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012
     ];
     return lineVertices;
 }
