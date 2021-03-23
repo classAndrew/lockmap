@@ -238,6 +238,7 @@ async function setup() {
     });
 
     var show_terr_leaderboard = true;
+    var showTerritories = true;
     gl.enable(gl.DEPTH_TEST);  
     gl.enable(gl.BLEND);
     function _loop(time) {
@@ -269,7 +270,8 @@ async function setup() {
         let localX = Math.round((mapRatio - hit[0] + camx) * 4091 / (2 * mapRatio) - 2392);
         let localY = Math.round((1 + hit[1] - camy) * 6485 / 2 - 6607);
         ImGui.Text(`x: ${localX}, y: ${localY}`);
-        ImGui.Checkbox("Territory Leaderboard", (value = show_terr_leaderboard) => show_terr_leaderboard = value)
+        ImGui.Checkbox("Territory Leaderboard", (value = show_terr_leaderboard) => show_terr_leaderboard = value);
+        ImGui.Checkbox("Show Territories", (value = showTerritories) => showTerritories = value);
         ImGui.End();
         ImGui.EndFrame();
         ImGui.Render();
@@ -290,35 +292,36 @@ async function setup() {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         // gl.drawArrays(gl.TRIANGLE_STRIP, 3, 3);
-
-        // switch to drawing territory overlay
-        gl.useProgram(terrShader);
-        gl.uniformMatrix4fv(terrViewLoc, false, mView);
-        gl.uniformMatrix4fv(terrWorldLoc, false, mWorld);
-        // I have to do this everytime I switch buffers
-        gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
-        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
-        // this is the 'proper' way to do it without EBO
-        // there's 6 values per vertex
-        for (let i = 0; i < terrVertices.length/6; i+=6) {
-            gl.drawArrays(gl.TRIANGLE_STRIP, i, 6);
-        }
-        
-        // switch to drawing the bounding boxes
-        gl.useProgram(lineShader);
-        gl.uniformMatrix4fv(lineViewLoc, false, mView);
-        gl.uniformMatrix4fv(lineWorldLoc, false, mWorld);
-        gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
-        for (let i = 0; i < lineVertices.length/3; i+=3) {
-            gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
-        }
-        // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
-        if (1+zoom < 0.9) {
-            for (let i = 0; i < namedTerrCoords.length; i++) {
-                if (!namedTerrCoords[i][0]) continue;
-                wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+zoom)/45);
+        if (showTerritories) {
+            // switch to drawing territory overlay
+            gl.useProgram(terrShader);
+            gl.uniformMatrix4fv(terrViewLoc, false, mView);
+            gl.uniformMatrix4fv(terrWorldLoc, false, mWorld);
+            // I have to do this everytime I switch buffers
+            gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
+            // this is the 'proper' way to do it without EBO
+            // there's 6 values per vertex
+            for (let i = 0; i < terrVertices.length/6; i+=6) {
+                gl.drawArrays(gl.TRIANGLE_STRIP, i, 6);
+            }
+            
+            // switch to drawing the bounding boxes
+            gl.useProgram(lineShader);
+            gl.uniformMatrix4fv(lineViewLoc, false, mView);
+            gl.uniformMatrix4fv(lineWorldLoc, false, mWorld);
+            gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+            for (let i = 0; i < lineVertices.length/3; i+=3) {
+                gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
+            }
+            // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
+            if (1+zoom < 0.9) {
+                for (let i = 0; i < namedTerrCoords.length; i++) {
+                    if (!namedTerrCoords[i][0]) continue;
+                    wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+zoom)/45);
+                }
             }
         }
         
