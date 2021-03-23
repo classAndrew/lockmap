@@ -24,6 +24,7 @@ var mapWidth;
     }
     // extremely hacky workaround. All of this works on Firefox but chrome doesn't want to work
     setTimeout(canvasResize, 100);
+    window.onresize = canvasResize;
     setup().then(() => {
         let mouseDown = false;
 
@@ -109,6 +110,7 @@ async function setup() {
         return new Promise((resolve, reject) => {
             image.onload = () => {
                 gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -123,7 +125,7 @@ async function setup() {
     }
     var meta = {};
     // gl.activeTexture(gl.TEXTURE0);
-    const texture = await loadTexture("/dest.png", meta);
+    const texture = await loadTexture("/dest.webp", meta);
     mapWidth = meta.width;
     mapRatio = meta.ratio;
     mapHeight = meta.height;
@@ -225,24 +227,30 @@ async function setup() {
     gl.uniform1i(uSamplerLoc, 0);
 
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
-    const res = await (await fetch(uri)).json()
-    const guilds = res.data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
     const prefMap = {};
-    for (var g of res.data) {
-        prefMap[g.name] = g.prefix;
-    }
-
-    // get territory coordinates along with the controlling guild
-    const namedTerrCoords = territories.map(t => {
-        return [prefMap[t.guild], t.location.startX+(t.location.endX-t.location.startX)/2, t.location.startY+(t.location.endY-t.location.startY)/2];
+    let namedTerrCoords; 
+    fetch(uri).then(data => {
+        return data.json();
+    }).then(data => {
+        data = data.data;
+        UI.guilds = data.map(e => [e.prefix, e.name, e.territories]).sort((a, b) => a[2] < b[2]);
+        for (var g of data) {
+            prefMap[g.name] = g.prefix;
+        }
+        UI.showLeaderboard = true;
+        // get territory coordinates along with the controlling guild
+        namedTerrCoords = territories.map(t => {
+            return [prefMap[t.guild], t.location.startX+(t.location.endX-t.location.startX)/2, t.location.startY+(t.location.endY-t.location.startY)/2];
+        });
+        UI.showTerritories = true;
     });
+    
 
-    var show_terr_leaderboard = true;
-    var showTerritories = true;
+    
+
     gl.enable(gl.DEPTH_TEST);  
     gl.enable(gl.BLEND);
-    function _loop(time) {
-        // gl.clear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);  
+    function _loop(time) { 
         // use main program (the one for drawing the map)
         // switch textures have to do this every time
         gl.useProgram(shaderProg);
@@ -250,32 +258,9 @@ async function setup() {
         mat4.fromTranslation(mWorld, vec4.fromValues(-camx, -camy, -(1 + zoom), 0));
         gl.uniformMatrix4fv(mWorldLoc, false, mWorld);
         gl.uniformMatrix4fv(mViewLoc, false, mView);
-        ImGui_Impl.NewFrame(time);
-        ImGui.NewFrame();
-        if (show_terr_leaderboard) {
-            ImGui.Begin("Territory Leaderboard",
-                (value = show_terr_leaderboard) => show_terr_leaderboard = value);
-            guilds.forEach((e) => ImGui.Text(`${e[2]} ${e[0]}: ${e[1]}`));
-            if (ImGui.Button("Close"))
-                show_terr_leaderboard = false;
-            ImGui.End();
-        }
-        ImGui.Begin("LockMap - The cooler map alternative");
-        ImGui.Text(VERSIONSTRING);
-        ImGui.Text(`Running at ${Math.round(ImGui.GetIO().Framerate)} fps`);
 
-        // compute coordinates by reversing
-        let hit = unproject(mView, mProj, lastX, lastY, window.innerWidth, window.innerHeight);
-        // local x and y is in-game coords
-        let localX = Math.round((mapRatio - hit[0] + camx) * 4091 / (2 * mapRatio) - 2392);
-        let localY = Math.round((1 + hit[1] - camy) * 6485 / 2 - 6607);
-        ImGui.Text(`x: ${localX}, y: ${localY}`);
-        ImGui.Checkbox("Territory Leaderboard", (value = show_terr_leaderboard) => show_terr_leaderboard = value);
-        ImGui.Checkbox("Show Territories", (value = showTerritories) => showTerritories = value);
-        ImGui.End();
-        ImGui.EndFrame();
-        ImGui.Render();
-        
+        UI.drawAll(mProj, mView, time);
+
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         // do I need to clear depth buffer sometimes?
@@ -292,7 +277,7 @@ async function setup() {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         // gl.drawArrays(gl.TRIANGLE_STRIP, 3, 3);
-        if (showTerritories) {
+        if (UI.showTerritories) {
             // switch to drawing territory overlay
             gl.useProgram(terrShader);
             gl.uniformMatrix4fv(terrViewLoc, false, mView);
@@ -331,129 +316,3 @@ async function setup() {
     }
     window.requestAnimationFrame(_loop);
 }
-
-function unproject(view, proj, mx, my, screenWidth, screenHeight) {
-    let x = 2.0 * mx / screenWidth - 1.0;
-    let y = 1.0 - (2.0 * my) / screenHeight;
-    let z = 1.0;
-    // let ray_nds = vec3.fromValues(x, y, z);
-    let ray_clip = vec4.fromValues(x, y, -1.0, 1.0);
-    let projinv = new Float32Array(16);
-    mat4.invert(projinv, proj);
-    let ray_eye = vec4.create();
-    mat4.mul(ray_eye, projinv, ray_clip);
-    ray_eye = vec4.fromValues(ray_eye[0], ray_eye[1], -1.0, 0.0);
-    // view inverse should be the same anyways since it's identity
-    let viewinv = new Float32Array(16);
-    mat4.invert(viewinv, view);
-    let ray_wor = vec4.create();
-    mat4.mul(ray_wor, viewinv, ray_eye);
-    ray_wor = vec3.fromValues(ray_wor[0], ray_wor[1], ray_wor[2]);
-    vec3.normalize(ray_wor, ray_wor);
-    // plane normal. it's just <0, 0, 1>
-    let n = vec3.fromValues(0, 0, 1);
-    // distance from camera
-    let d = -(1 + zoom);
-    // origin of the ray. again, no view so it's just 0,0,0
-    let O = vec3.fromValues(0, 0, 0);
-    // compute t
-    let t = -(dot3(O, n) + d) / dot3(ray_wor, n);
-    vec3.scale(ray_wor, ray_wor, t);
-    vec3.add(O, O, ray_wor);
-    return O;
-}
-
-function dot3(a, b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY) {
-    let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
-         (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
-    const terrVertices = [
-        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-        
-        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
-    ];
-    return terrVertices;
-}
-
-function getVerticesColor(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY, color) {
-    let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
-         (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
-    const terrVertices = [
-        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
-        ...color,
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
-        ...color,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-        ...color,
-        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
-        ...color,
-        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-        ...color,
-        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
-        ...color
-    ];
-    return terrVertices;
-}
-
-// in-game coordinates (aka annoying offset time). 
-function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thickness) {
-    [x0, y0, x1, y1] = [(x0+offsetX)/mapResX, (mapResY-y0+offsetY)/mapResY,
-        (x1+offsetX)/mapResX, (mapResY-y1+offsetY)/mapResY];
-    // compute perpendicular vectors (unit vec)
-    let u = [(y1-y0), -(x1-x0)*mapRatio];
-    vec2.normalize(u, u);
-    vec2.scale(u, u, thickness);
-
-    const lineVertices = [
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012, 
-        -mapRatio+(x0)*mapRatio*2+u[0], -1+(y0)*2+u[1], 0.0012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012,
-
-        -mapRatio+(x1)*mapRatio*2-u[0], -1+(y1)*2-u[1], 0.0012,
-        -mapRatio+(x0)*mapRatio*2-u[0], -1+(y0)*2-u[1], 0.0012,
-        -mapRatio+(x1)*mapRatio*2+u[0], -1+(y1)*2+u[1], 0.0012
-    ];
-    return lineVertices;
-}
-
-// in-game coordinates to opengl [-1, 1] coordinates
-function coordConv(mapResX, mapResY, offsetX, offsetY, x, y) {
-    return [(x+offsetX)/mapResX, (mapResY-y+offsetY)/mapResY]
-}
-
-// gets the bounding box vertices from points
-function getBoxVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thickness) {
-    const vertices = [].concat(
-        getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y0, thickness),
-        getLineVertices(mapResX, mapResY, offsetX, offsetY, x1, y0, x1, y1, thickness),
-        getLineVertices(mapResX, mapResY, offsetX, offsetY, x1, y1, x0, y1, thickness),
-        getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y1, x0, y0, thickness),
-    );
-    return vertices;
-}
-
-// turns a hex color string into 3 normalized rgb. Otherwise hashes, then repeats
-function hexToRGB(hx, name) {
-    let a = hx ? parseInt(hx.substr(1)) : name.hashCode();
-    return [((a >> 16) & 0xFF) / 255, ((a >> 8) & 0xFF) / 255, (a & 0xFF) / 255];
-}
-
-// fast hash
-// https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
-String.prototype.hashCode = function() {
-    var hash = 0, i, chr;
-    if (this.length === 0) return hash;
-    for (i = 0; i < this.length; i++) {
-      chr   = this.charCodeAt(i);
-      hash  = ((hash << 5) - hash) + chr;
-      hash |= 0; // Convert to 32bit integer
-    }
-    return hash;
-};
