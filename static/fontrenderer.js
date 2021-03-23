@@ -106,8 +106,8 @@ class WorldFontRenderer {
         // attribpointer can be set outside loop
         this.gl.vertexAttribPointer(0, 3, this.gl.FLOAT, false, 5*4, 0);
         this.gl.vertexAttribPointer(1, 2, this.gl.FLOAT, false, 5*4, 3*4);
-        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 3); 
-        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 3, 3);
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 5); 
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 5, 5);
         
         // can use textvertices as an instance var instead of new instantiatio
 

@@ -143,7 +143,8 @@ async function setup() {
 
     let terrVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
-        return getVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY);
+        let color = hexToRGB("", t.guild);
+        return getVerticesColor(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY, color);
     }).flat();
 
     // generate vertices for territory box outlines
@@ -166,8 +167,10 @@ async function setup() {
     const terrbuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrVertices), gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
     gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
+    gl.enableVertexAttribArray(1);
 
     const linebuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
@@ -294,11 +297,12 @@ async function setup() {
         gl.uniformMatrix4fv(terrWorldLoc, false, mWorld);
         // I have to do this everytime I switch buffers
         gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
-        
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
         // this is the 'proper' way to do it without EBO
-        for (let i = 0; i < terrVertices.length/3; i+=3) {
-            gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
+        // there's 6 values per vertex
+        for (let i = 0; i < terrVertices.length/6; i+=6) {
+            gl.drawArrays(gl.TRIANGLE_STRIP, i, 6);
         }
         
         // switch to drawing the bounding boxes
@@ -310,10 +314,10 @@ async function setup() {
         for (let i = 0; i < lineVertices.length/3; i+=3) {
             gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
         }
-        
         // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
         if (1+zoom < 0.9) {
             for (let i = 0; i < namedTerrCoords.length; i++) {
+                if (!namedTerrCoords[i][0]) continue;
                 wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+zoom)/45);
             }
         }
@@ -367,10 +371,30 @@ function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, e
         -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
         -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
         -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
-
+        
         -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
         -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
         -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001
+    ];
+    return terrVertices;
+}
+
+function getVerticesColor(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY, color) {
+    let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
+         (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
+    const terrVertices = [
+        -mapRatio+startx*mapRatio*2, -1+starty*2, 0.001, 
+        ...color,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
+        ...color,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        ...color,
+        -mapRatio+endx*mapRatio*2, -1+endy*2, 0.001,
+        ...color,
+        -mapRatio+startx*mapRatio*2, -1+endy*2, 0.001,
+        ...color,
+        -mapRatio+endx*mapRatio*2, -1+starty*2, 0.001,
+        ...color
     ];
     return terrVertices;
 }
@@ -411,3 +435,22 @@ function getBoxVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thic
     );
     return vertices;
 }
+
+// turns a hex color string into 3 normalized rgb. Otherwise hashes, then repeats
+function hexToRGB(hx, name) {
+    let a = hx ? parseInt(hx.substr(1)) : name.hashCode();
+    return [((a >> 16) & 0xFF) / 255, ((a >> 8) & 0xFF) / 255, (a & 0xFF) / 255];
+}
+
+// fast hash
+// https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
+String.prototype.hashCode = function() {
+    var hash = 0, i, chr;
+    if (this.length === 0) return hash;
+    for (i = 0; i < this.length; i++) {
+      chr   = this.charCodeAt(i);
+      hash  = ((hash << 5) - hash) + chr;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+};
