@@ -10,12 +10,18 @@ class UI {
 
     static guilds;
 
+    // for the popup
+    static showPopup = false;
+    static popupScreenX;
+    static popupScreenY;
+
     // all draw functions are gated
     static drawAll(mProj, mView, time) {
         ImGui_Impl.NewFrame(time);
         ImGui.NewFrame();
         UI.drawMainWindow(mProj, mView, time);
         UI.drawLeaderWindow();
+        UI.drawPopupWindow();
         ImGui.EndFrame();
         ImGui.Render();
     }
@@ -42,6 +48,14 @@ class UI {
             UI.guilds.forEach((e) => ImGui.Text(`${e[2]} ${e[0]}: ${e[1]}`));
             if (ImGui.Button("Close"))
                 UI.showLeaderboard = false;
+            ImGui.End();
+        }
+    }
+
+    static drawPopupWindow() {
+        if (UI.showPopup) {
+            ImGui.Begin("This Place Is Super Cool");
+            ImGui.Text("yes");
             ImGui.End();
         }
     }

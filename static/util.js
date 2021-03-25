@@ -124,3 +124,7 @@ String.prototype.hashCode = function() {
     }
     return hash;
 };
+
+class Info {
+    
+}

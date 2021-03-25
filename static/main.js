@@ -15,22 +15,38 @@ var mapWidth;
 ! function main() {
 
     if (!gl) {
-        alert("Get your browser to support webgl2 smile");
+        alert("Get your browser to support webgl2 smile\n(Chrome and Firefox support this for sure)");
     }
-
-    function canvasResize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    let realWindowHeight, realWindowWidth;
+    let canvasResize = () => {
+        if (!realWindowHeight) {
+            realWindowHeight = window.innerHeight;
+            realWindowWidth = window.innerWidth;
+        }
+        canvas.width = realWindowWidth;
+        canvas.height = realWindowHeight;
     }
     // extremely hacky workaround. All of this works on Firefox but chrome doesn't want to work
-    setTimeout(canvasResize, 100);
+    setTimeout(canvasResize, 60);
     window.onresize = canvasResize;
+    var then = 0;
     setup().then(() => {
         let mouseDown = false;
 
         // for some reason event.buttons is broken
-        document.onmousedown = () => mouseDown = true;
-        document.onmouseup = () => mouseDown = false;
+        document.onmousedown = () => {
+            then = Date.now();
+            mouseDown = true;
+        }
+        document.onmouseup = e => {
+            let dt = Date.now()-then;
+            if (dt < 150) {
+                UI.showPopup = true;
+                UI.popupScreenX = e.x;
+                UI.popupScreenY = e.y;
+            }
+            mouseDown = false;
+        }
         document.onmousemove = (e) => {
             if (firstMove) {
                 lastX = e.x;
@@ -39,6 +55,7 @@ var mapWidth;
                 return;
             }
             if (mouseDown && !ImGui.GetIO().WantCaptureMouse) {
+                UI.showPopup = false;
                 camx -= (e.x - lastX) * 0.0008;
                 camy += (e.y - lastY) * 0.0008;
                 lastX = e.x;
@@ -51,6 +68,7 @@ var mapWidth;
             if (ImGui.GetIO().WantCaptureMouse || 1 + zoom + e.deltaY * 0.0005 <= 0) return;
             zoom += e.deltaY * 0.0005;
         }
+        
     });
 }();
 
