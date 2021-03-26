@@ -39,11 +39,13 @@ var mapWidth;
             mouseDown = true;
         }
         document.onmouseup = e => {
+            if (ImGui.GetIO().WantCaptureMouse) return;
             let dt = Date.now()-then;
             if (dt < 150) {
                 UI.showPopup = true;
                 UI.popupScreenX = e.x;
                 UI.popupScreenY = e.y;
+                UI.popupVec2 = new ImGui.ImVec2(e.x, e.y);
             }
             mouseDown = false;
         }

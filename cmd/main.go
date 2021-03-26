@@ -34,5 +34,5 @@ func main() {
 	})
 	v1 := r.Group("/v1/")
 	v1.GET("/leaderboard", controllers.GetLeaderboard)
-	r.Run(":3141")
+	r.Run(":80")
 }

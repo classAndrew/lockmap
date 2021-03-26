@@ -126,5 +126,11 @@ String.prototype.hashCode = function() {
 };
 
 class Info {
+
+    static territories;
     
+    // gets the territory WITH IN GAME COORDINATES
+    static getLocation(x, y) {
+
+    }
 }

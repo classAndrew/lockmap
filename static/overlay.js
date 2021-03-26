@@ -14,6 +14,8 @@ class UI {
     static showPopup = false;
     static popupScreenX;
     static popupScreenY;
+    static popupVec2;
+    static popupSize = new ImGui.ImVec2(200, 150);
 
     // all draw functions are gated
     static drawAll(mProj, mView, time) {
@@ -54,6 +56,8 @@ class UI {
 
     static drawPopupWindow() {
         if (UI.showPopup) {
+            ImGui.SetNextWindowPos(UI.popupVec2, ImGui.ImGuiCond_FirstUseEver);
+            ImGui.SetNextWindowSize(UI.popupSize, ImGui.ImGuiCond_FirstUseEver);
             ImGui.Begin("This Place Is Super Cool");
             ImGui.Text("yes");
             ImGui.End();
