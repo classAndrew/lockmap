@@ -1,19 +1,13 @@
+import {unproject, dot3, getVertices, getVerticesColor, getLineVertices, getBoxVertices, coordConv, hexToRGB, Info} from './util.js';
+import {WorldFontRenderer} from './fontrenderer.js';
+import {UI} from './overlay.js';
+
 const canvas = document.querySelector("#cv");
-const VERSIONSTRING = "Version 0.1.1"
 var gl = canvas.getContext("webgl2");
 // all program states
 let firstMove = true;
-var camx = 0;
-var camy = 0;
-var zoom = 0;
-var lastX = 0;
-var lastY = 0;
-var mapRatio;
-var mapHeight;
-var mapWidth;
 
 ! function main() {
-
     if (!gl) {
         alert("Get your browser to support webgl2 smile\n(Chrome and Firefox support this for sure)");
     }
@@ -51,24 +45,24 @@ var mapWidth;
         }
         document.onmousemove = (e) => {
             if (firstMove) {
-                lastX = e.x;
-                lastY = e.y;
+                UI.lastX = e.x;
+                UI.lastY = e.y;
                 firstMove = false;
                 return;
             }
             if (mouseDown && !ImGui.GetIO().WantCaptureMouse) {
                 UI.showPopup = false;
-                camx -= (e.x - lastX) * 0.0008;
-                camy += (e.y - lastY) * 0.0008;
-                lastX = e.x;
-                lastY = e.y;
+                UI.camx -= (e.x - UI.lastX) * 0.0008;
+                UI.camy += (e.y - UI.lastY) * 0.0008;
+                UI.lastX = e.x;
+                UI.lastY = e.y;
             } else {
                 firstMove = true;
             }
         }
         document.onwheel = (e) => {
-            if (ImGui.GetIO().WantCaptureMouse || 1 + zoom + e.deltaY * 0.0005 <= 0) return;
-            zoom += e.deltaY * 0.0005;
+            if (ImGui.GetIO().WantCaptureMouse || 1 + UI.zoom + e.deltaY * 0.0005 <= 0) return;
+            UI.zoom += e.deltaY * 0.0005;
         }
         
     });
@@ -124,13 +118,13 @@ async function setup() {
     const fontShader = await setupShaders("/font_vertex.vs", "/font_fragment.fs");
     
     // it onload isn't asynchronous
-    async function loadTexture(url, meta) {
+    async function loadTexture(url, meta, gl) {
         var image = new Image();
         let texture = gl.createTexture();
         return new Promise((resolve, reject) => {
             image.onload = () => {
                 gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -145,17 +139,16 @@ async function setup() {
     }
     var meta = {};
     // gl.activeTexture(gl.TEXTURE0);
-    const texture = await loadTexture("/dest.webp", meta);
-    mapWidth = meta.width;
-    mapRatio = meta.ratio;
-    mapHeight = meta.height;
-
+    const texture = await loadTexture("/dest.webp", meta, gl);
+    UI.mapWidth = meta.width;
+    UI.mapRatio = meta.ratio;
+    UI.mapHeight = meta.height;
     let [offsetX, offsetY] = [2392, -6607];
 
-    const vertices = [-mapRatio, -1, 0, 0, 0,
-        mapRatio, -1, 0, 1, 0, -mapRatio, 1, 0, 0, 1,
+    const vertices = [-UI.mapRatio, -1, 0, 0, 0,
+        UI.mapRatio, -1, 0, 1, 0, -UI.mapRatio, 1, 0, 0, 1,
 
-        mapRatio, 1, 0, 1, 1, -mapRatio, 1, 0, 0, 1, -mapRatio, -1, 0, 0, 1
+        UI.mapRatio, 1, 0, 1, 1, -UI.mapRatio, 1, 0, 0, 1, -UI.mapRatio, -1, 0, 0, 1
     ];
 
     // code for generating vertices of ALL territories
@@ -166,13 +159,13 @@ async function setup() {
     let terrVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
         let color = hexToRGB("", t.guild);
-        return getVerticesColor(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY, color);
+        return getVerticesColor(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, color);
     }).flat();
 
     // generate vertices for territory box outlines
     let lineVertices = territories.map(t => {
         let {startX, startY, endX, endY} = t.location;
-        return getBoxVertices(mapWidth, mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
+        return getBoxVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
     }).flat();
 
     // gl buffer create and init code
@@ -235,7 +228,7 @@ async function setup() {
 
     // world font renderer
 
-    const wFontRenderer = new WorldFontRenderer(fontShader, gl, mapWidth, mapHeight, offsetX, offsetY, mView, mProj, mWorld);
+    const wFontRenderer = new WorldFontRenderer(fontShader, gl, UI.mapWidth, UI.mapHeight, offsetX, offsetY, mView, mProj, mWorld);
     
     // load and bind textures
     // have to switch progam before sending uniform
@@ -266,8 +259,6 @@ async function setup() {
     });
     
 
-    
-
     gl.enable(gl.DEPTH_TEST);  
     gl.enable(gl.BLEND);
     function _loop(time) { 
@@ -275,7 +266,7 @@ async function setup() {
         // switch textures have to do this every time
         gl.useProgram(shaderProg);
         mat4.lookAt(mView, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
-        mat4.fromTranslation(mWorld, vec4.fromValues(-camx, -camy, -(1 + zoom), 0));
+        mat4.fromTranslation(mWorld, vec4.fromValues(-UI.camx, -UI.camy, -(1 + UI.zoom), 0));
         gl.uniformMatrix4fv(mWorldLoc, false, mWorld);
         gl.uniformMatrix4fv(mViewLoc, false, mView);
 
@@ -322,10 +313,10 @@ async function setup() {
                 gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
             }
             // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
-            if (1+zoom < 0.9) {
+            if (1+UI.zoom < 0.9) {
                 for (let i = 0; i < namedTerrCoords.length; i++) {
                     if (!namedTerrCoords[i][0]) continue;
-                    wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+zoom)/45);
+                    wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+UI.zoom)/45);
                 }
             }
         }

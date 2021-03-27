@@ -134,3 +134,5 @@ function canvText(text, width, height) {
     txtCtx.fillText(text, width/2, height/2);
     return txtCtx.canvas;
 }
+
+export {WorldFontRenderer};

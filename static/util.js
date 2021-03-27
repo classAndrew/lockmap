@@ -1,5 +1,6 @@
 
-function unproject(view, proj, mx, my, screenWidth, screenHeight) {
+function unproject(view, proj, mx, my, screenWidth, screenHeight, zoom) {
+    // console.log(view, proj, mx, my);
     let x = 2.0 * mx / screenWidth - 1.0;
     let y = 1.0 - (2.0 * my) / screenHeight;
     let z = 1.0;
@@ -35,6 +36,7 @@ function dot3(a, b) {
 }
 
 function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY) {
+    let mapRatio = mapResX/mapResY;
     let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
          (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
     const terrVertices = [
@@ -50,6 +52,7 @@ function getVertices(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, e
 }
 
 function getVerticesColor(mapResX, mapResY, offsetX, offsetY, startX, startY, endX, endY, color) {
+    let mapRatio = mapResX/mapResY;
     let [startx, starty, endx, endy] = [(startX+offsetX)/mapResX, (mapResY-startY+offsetY)/mapResY,
          (endX+offsetX)/mapResX, (mapResY-endY+offsetY)/mapResY];
     const terrVertices = [
@@ -73,6 +76,7 @@ function getVerticesColor(mapResX, mapResY, offsetX, offsetY, startX, startY, en
 function getLineVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thickness) {
     [x0, y0, x1, y1] = [(x0+offsetX)/mapResX, (mapResY-y0+offsetY)/mapResY,
         (x1+offsetX)/mapResX, (mapResY-y1+offsetY)/mapResY];
+    let mapRatio = mapResX/mapResY;
     // compute perpendicular vectors (unit vec)
     let u = [(y1-y0), -(x1-x0)*mapRatio];
     vec2.normalize(u, u);
@@ -107,7 +111,7 @@ function getBoxVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thic
 }
 
 // turns a hex color string into 3 normalized rgb. Otherwise hashes, then repeats
-function hexToRGB(hx, name) {
+function hexToRGB (hx, name) {
     let a = hx ? parseInt(hx.substr(1)) : name.hashCode();
     return [((a >> 16) & 0xFF) / 255, ((a >> 8) & 0xFF) / 255, (a & 0xFF) / 255];
 }
@@ -134,3 +138,5 @@ class Info {
 
     }
 }
+
+export {unproject, dot3, getVertices, getVerticesColor, getLineVertices, getBoxVertices, coordConv, hexToRGB, Info};

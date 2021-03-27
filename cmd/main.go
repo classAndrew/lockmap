@@ -24,6 +24,8 @@ func main() {
 	r.StaticFile("/font_fragment.fs", "./static/font_fragment.fs")
 	r.StaticFile("/font_vertex.vs", "./static/font_vertex.vs")
 	r.StaticFile("/fontrenderer.js", "./static/fontrenderer.js")
+
+	r.StaticFile("/bundle.js", "./dist/bundle.js")
 	r.StaticFile("/", "./static/index.html")
 
 	// enable cors middleware
@@ -34,5 +36,5 @@ func main() {
 	})
 	v1 := r.Group("/v1/")
 	v1.GET("/leaderboard", controllers.GetLeaderboard)
-	r.Run(":80")
+	r.Run(":3141")
 }
