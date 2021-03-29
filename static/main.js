@@ -155,19 +155,20 @@ async function setup() {
 
     // code for generating vertices of ALL territories
 
-    let terdat = await (await fetch("https://api.wynncraft.com/public_api.php?action=territoryList")).json();
+    let terdat = await (await fetch("/v1/terrCache")).json();
     let territories = Object.values(terdat.territories);
 
     let terrVertices = territories.map(t => {
-        let { startX, startY, endX, endY } = t.location;
-        let color = hexToRGB("", t.guild);
-        return getVerticesColor(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, color);
+        // athena uses Z intead of Y
+        let { startX, startZ, endX, endZ } = t.location;
+        let color = hexToRGB(t.guildColor, t.guild);
+        return getVerticesColor(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startZ, endX, endZ, color);
     }).flat();
 
     // generate vertices for territory box outlines
     let lineVertices = territories.map(t => {
-        let { startX, startY, endX, endY } = t.location;
-        return getBoxVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
+        let { startX, startZ, endX, endZ } = t.location;
+        return getBoxVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startZ, endX, endZ, 0.0004);
     }).flat();
 
     // generating the vertices for the trade route lines
@@ -175,8 +176,8 @@ async function setup() {
         let [a, b] = e;
         let locA = terdat.territories[a].location;
         let locB = terdat.territories[b].location;
-        let [aX, aY] = [(locA.startX + locA.endX) / 2, (locA.startY + locA.endY) / 2];
-        let [bX, bY] = [(locB.startX + locB.endX) / 2, (locB.startY + locB.endY) / 2];
+        let [aX, aY] = [(locA.startX + locA.endX) / 2, (locA.startZ + locA.endZ) / 2];
+        let [bX, bY] = [(locB.startX + locB.endX) / 2, (locB.startZ + locB.endZ) / 2];
         return getLineVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, aX, aY, bX, bY, 0.0008);
     }).flat();
 
@@ -272,7 +273,7 @@ async function setup() {
         UI.showLeaderboard = true;
         // get territory coordinates along with the controlling guild
         namedTerrCoords = territories.map(t => {
-            return [prefMap[t.guild], t.location.startX + (t.location.endX - t.location.startX) / 2, t.location.startY + (t.location.endY - t.location.startY) / 2];
+            return [prefMap[t.guild], t.location.startX + (t.location.endX - t.location.startX) / 2, t.location.startZ + (t.location.endZ - t.location.startZ) / 2];
         });
         UI.showTerritories = true;
     });

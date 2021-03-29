@@ -112,7 +112,7 @@ function getBoxVertices(mapResX, mapResY, offsetX, offsetY, x0, y0, x1, y1, thic
 
 // turns a hex color string into 3 normalized rgb. Otherwise hashes, then repeats
 function hexToRGB (hx, name) {
-    let a = hx ? parseInt(hx.substr(1)) : name.hashCode();
+    let a = hx ? parseInt(hx.substr(1), 16) : name.hashCode();
     return [((a >> 16) & 0xFF) / 255, ((a >> 8) & 0xFF) / 255, (a & 0xFF) / 255];
 }
 

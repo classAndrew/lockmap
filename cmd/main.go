@@ -38,5 +38,6 @@ func main() {
 	})
 	v1 := r.Group("/v1/")
 	v1.GET("/leaderboard", controllers.GetLeaderboard)
+	v1.GET("/terrCache", controllers.GetTerrCache)
 	r.Run(":3141")
 }
