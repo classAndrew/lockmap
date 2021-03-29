@@ -1,6 +1,7 @@
-import {unproject, dot3, getVertices, getVerticesColor, getLineVertices, getBoxVertices, coordConv, hexToRGB, Info} from './util.js';
-import {WorldFontRenderer} from './fontrenderer.js';
-import {UI} from './overlay.js';
+import { unproject, dot3, getVertices, getVerticesColor, getLineVertices, getBoxVertices, coordConv, hexToRGB, Info } from './util.js';
+import { WorldFontRenderer } from './fontrenderer.js';
+import { UI } from './overlay.js';
+import { terrEdges } from './assets/routes.js';
 
 const canvas = document.querySelector("#cv");
 var gl = canvas.getContext("webgl2");
@@ -20,8 +21,7 @@ let firstMove = true;
         canvas.width = realWindowWidth;
         canvas.height = realWindowHeight;
     }
-    // extremely hacky workaround. All of this works on Firefox but chrome doesn't want to work
-    setTimeout(canvasResize, 60);
+    canvasResize();
     window.onresize = canvasResize;
     var then = 0;
     setup().then(() => {
@@ -29,12 +29,13 @@ let firstMove = true;
 
         // for some reason event.buttons is broken
         document.onmousedown = () => {
+            if (ImGui.GetIO().WantCaptureMouse) return;
             then = Date.now();
             mouseDown = true;
         }
         document.onmouseup = e => {
             if (ImGui.GetIO().WantCaptureMouse) return;
-            let dt = Date.now()-then;
+            let dt = Date.now() - then;
             if (dt < 150) {
                 UI.showPopup = true;
                 UI.popupScreenX = e.x;
@@ -50,7 +51,8 @@ let firstMove = true;
                 firstMove = false;
                 return;
             }
-            if (mouseDown && !ImGui.GetIO().WantCaptureMouse) {
+            if (ImGui.GetIO().WantCaptureMouse) return;
+            if (mouseDown) {
                 UI.showPopup = false;
                 UI.camx -= (e.x - UI.lastX) * 0.0008;
                 UI.camy += (e.y - UI.lastY) * 0.0008;
@@ -64,7 +66,7 @@ let firstMove = true;
             if (ImGui.GetIO().WantCaptureMouse || 1 + UI.zoom + e.deltaY * 0.0005 <= 0) return;
             UI.zoom += e.deltaY * 0.0005;
         }
-        
+
     });
 }();
 
@@ -116,7 +118,7 @@ async function setup() {
     const terrShader = await setupShaders("/terr_vertex.vs", "/terr_fragment.fs");
     const lineShader = await setupShaders("/line_vertex.vs", "/line_fragment.fs");
     const fontShader = await setupShaders("/font_vertex.vs", "/font_fragment.fs");
-    
+
     // it onload isn't asynchronous
     async function loadTexture(url, meta, gl) {
         var image = new Image();
@@ -146,26 +148,36 @@ async function setup() {
     let [offsetX, offsetY] = [2392, -6607];
 
     const vertices = [-UI.mapRatio, -1, 0, 0, 0,
-        UI.mapRatio, -1, 0, 1, 0, -UI.mapRatio, 1, 0, 0, 1,
+    UI.mapRatio, -1, 0, 1, 0, -UI.mapRatio, 1, 0, 0, 1,
 
-        UI.mapRatio, 1, 0, 1, 1, -UI.mapRatio, 1, 0, 0, 1, -UI.mapRatio, -1, 0, 0, 1
+    UI.mapRatio, 1, 0, 1, 1, -UI.mapRatio, 1, 0, 0, 1, -UI.mapRatio, -1, 0, 0, 1
     ];
 
     // code for generating vertices of ALL territories
-    
+
     let terdat = await (await fetch("https://api.wynncraft.com/public_api.php?action=territoryList")).json();
     let territories = Object.values(terdat.territories);
 
     let terrVertices = territories.map(t => {
-        let {startX, startY, endX, endY} = t.location;
+        let { startX, startY, endX, endY } = t.location;
         let color = hexToRGB("", t.guild);
         return getVerticesColor(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, color);
     }).flat();
 
     // generate vertices for territory box outlines
     let lineVertices = territories.map(t => {
-        let {startX, startY, endX, endY} = t.location;
+        let { startX, startY, endX, endY } = t.location;
         return getBoxVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, startX, startY, endX, endY, 0.0004);
+    }).flat();
+
+    // generating the vertices for the trade route lines
+    let routeLineVertices = terrEdges.map(e => {
+        let [a, b] = e;
+        let locA = terdat.territories[a].location;
+        let locB = terdat.territories[b].location;
+        let [aX, aY] = [(locA.startX + locA.endX) / 2, (locA.startY + locA.endY) / 2];
+        let [bX, bY] = [(locB.startX + locB.endX) / 2, (locB.startY + locB.endY) / 2];
+        return getLineVertices(UI.mapWidth, UI.mapHeight, offsetX, offsetY, aX, aY, bX, bY, 0.0008);
     }).flat();
 
     // gl buffer create and init code
@@ -182,15 +194,22 @@ async function setup() {
     const terrbuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrVertices), gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6 * 4, 0);
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
     gl.enableVertexAttribArray(1);
 
     const linebuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineVertices), gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3 * 4, 0);
+    gl.enableVertexAttribArray(0);
+
+    // routes
+    const routebuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, routebuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(routeLineVertices), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3 * 4, 0);
     gl.enableVertexAttribArray(0);
 
     // build matrices
@@ -217,7 +236,7 @@ async function setup() {
 
     gl.useProgram(terrShader);
     gl.uniformMatrix4fv(terrProjLoc, false, mProj);
-    
+
     // set the uniforms for the line shader
     gl.useProgram(lineShader);
     var lineWorldLoc = gl.getUniformLocation(lineShader, "world");
@@ -229,7 +248,7 @@ async function setup() {
     // world font renderer
 
     const wFontRenderer = new WorldFontRenderer(fontShader, gl, UI.mapWidth, UI.mapHeight, offsetX, offsetY, mView, mProj, mWorld);
-    
+
     // load and bind textures
     // have to switch progam before sending uniform
     gl.useProgram(shaderProg);
@@ -241,7 +260,7 @@ async function setup() {
 
     const uri = "https://api.wynncraft.com/public_api.php?action=statsLeaderboard&type=guild&timeframe=alltime"
     const prefMap = {};
-    let namedTerrCoords; 
+    let namedTerrCoords;
     fetch(uri).then(data => {
         return data.json();
     }).then(data => {
@@ -253,15 +272,15 @@ async function setup() {
         UI.showLeaderboard = true;
         // get territory coordinates along with the controlling guild
         namedTerrCoords = territories.map(t => {
-            return [prefMap[t.guild], t.location.startX+(t.location.endX-t.location.startX)/2, t.location.startY+(t.location.endY-t.location.startY)/2];
+            return [prefMap[t.guild], t.location.startX + (t.location.endX - t.location.startX) / 2, t.location.startY + (t.location.endY - t.location.startY) / 2];
         });
         UI.showTerritories = true;
     });
-    
 
-    gl.enable(gl.DEPTH_TEST);  
+
+    gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    function _loop(time) { 
+    function _loop(time) {
         // use main program (the one for drawing the map)
         // switch textures have to do this every time
         gl.useProgram(shaderProg);
@@ -283,7 +302,7 @@ async function setup() {
         gl.bindTexture(gl.TEXTURE_2D, texture);
         // I have to do this everytime I switch buffers
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 5 * 4, 0);
-        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 5 * 4, 3*4);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 5 * 4, 3 * 4);
         // transparency
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -295,32 +314,41 @@ async function setup() {
             gl.uniformMatrix4fv(terrWorldLoc, false, mWorld);
             // I have to do this everytime I switch buffers
             gl.bindBuffer(gl.ARRAY_BUFFER, terrbuf);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, 0);
-            gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, 3*4);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6 * 4, 0);
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
             // this is the 'proper' way to do it without EBO
-            // there's 6 values per vertex
-            for (let i = 0; i < terrVertices.length/6; i+=6) {
+            // there's 6 values per vertex. divide by 6 to get num of vertices, 
+            // i+=6 to jump to the next vertex, and drawArrays(..., 6) because there's
+            // 6 indices between each vertex
+            for (let i = 0; i < terrVertices.length / 6; i += 6) {
                 gl.drawArrays(gl.TRIANGLE_STRIP, i, 6);
             }
-            
+
             // switch to drawing the bounding boxes
             gl.useProgram(lineShader);
             gl.uniformMatrix4fv(lineViewLoc, false, mView);
             gl.uniformMatrix4fv(lineWorldLoc, false, mWorld);
             gl.bindBuffer(gl.ARRAY_BUFFER, linebuf);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, 0);
-            for (let i = 0; i < lineVertices.length/3; i+=3) {
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3 * 4, 0);
+            for (let i = 0; i < lineVertices.length / 3; i += 3) {
                 gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
             }
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, routebuf);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 3 * 4, 0);
+            for (let i = 0; i < routeLineVertices.length / 3; i += 3) {
+                gl.drawArrays(gl.TRIANGLE_STRIP, i, 3);
+            }
+
             // wFontRenderer.renderText("morph besst build text plox work", 1, 0);
-            if (1+UI.zoom < 0.9) {
+            if (1 + UI.zoom < 0.9) {
                 for (let i = 0; i < namedTerrCoords.length; i++) {
                     if (!namedTerrCoords[i][0]) continue;
-                    wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1+UI.zoom)/45);
+                    wFontRenderer.renderText(namedTerrCoords[i][0], namedTerrCoords[i][1], namedTerrCoords[i][2], (1 + UI.zoom) / 45);
                 }
             }
         }
-        
+
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
 
         window.requestAnimationFrame(_loop);

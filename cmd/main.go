@@ -10,7 +10,7 @@ func main() {
 	// r.Static("/", "./static")
 	// workaround
 	r.StaticFile("/dest.webp", "./static/assets/dest.webp")
-	r.StaticFile("/favicon.png", "./static/assets/favicon.png")
+	r.StaticFile("/favicon.png", "./static/favicon.png")
 
 	r.StaticFile("/fragment.fs", "./static/shaders/fragment.fs")
 	r.StaticFile("/vertex.vs", "./static/shaders/vertex.vs")

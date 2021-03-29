@@ -2,6 +2,8 @@
 import {unproject} from './util.js';
 
 const VERSIONSTRING = "Version 0.1.1"
+// for the main window
+
 class UI {
     // ui states
     static showTerritories = false;
@@ -26,11 +28,18 @@ class UI {
     static camx = 0;
     static camy = 0;
     static zoom = 0;
+    
+    static first = false;
+    static mainWindowSize = new ImGui.ImVec2(300, 150);
 
     // all draw functions are gated
     static drawAll(mProj, mView, time) {
         ImGui_Impl.NewFrame(time);
         ImGui.NewFrame();
+        if (!UI.first) {
+            ImGui.SetNextWindowSize(UI.mainWindowSize, ImGui.ImGuiCond_FirstUseEver);
+            UI.first = false;
+        }
         UI.drawMainWindow(mProj, mView, time);
         UI.drawLeaderWindow();
         UI.drawPopupWindow();
