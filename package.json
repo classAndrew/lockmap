@@ -1,0 +1,14 @@
+{
+    "name": "lockmap",
+    "version": "1.0.0",
+    "description": "Andrew's portfolio for things",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1",
+      "build": "tsc && webpack app/app.ts -o dist/app.bundle.js --mode=development",
+      "esbuild": "esbuild --bundle static/main.ts --outfile=dist/app.bundle.js --loader:.ts=ts",
+      "start": "go run cmd/main.go"
+    },
+    "author": "Andrew",
+    "license": "ISC"
+  }
+  
